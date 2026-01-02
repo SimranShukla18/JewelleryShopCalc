@@ -90,6 +90,85 @@ const WeightField = ({ label, value, setValue, min = 0, max = 10000, step = "0.0
   );
 };
 
+// DiscountField Component with both Percentage and Rupees options
+const DiscountField = ({ 
+  discountType, 
+  setDiscountType, 
+  discountPercentage, 
+  setDiscountPercentage, 
+  discountRupees, 
+  setDiscountRupees,
+  error = null 
+}) => {
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-sm font-medium text-gray-700">Discount</label>
+        {error && (
+          <span className="text-xs text-red-600 flex items-center gap-1">
+            <AlertCircle size={12} />
+            {error}
+          </span>
+        )}
+      </div>
+      
+      {/* Discount Type Toggle */}
+      <div className="flex items-center mb-2">
+        <span className="text-sm text-gray-600 mr-4">Type:</span>
+        <div className="flex bg-gray-100 rounded-lg p-1">
+          <button
+            type="button"
+            onClick={() => setDiscountType('percentage')}
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              discountType === 'percentage' 
+                ? 'bg-blue-500 text-white' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Percentage
+          </button>
+          <button
+            type="button"
+            onClick={() => setDiscountType('rupees')}
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              discountType === 'rupees' 
+                ? 'bg-blue-500 text-white' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Rupees
+          </button>
+        </div>
+      </div>
+      
+      {/* Discount Input */}
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          value={discountType === 'percentage' ? discountPercentage : discountRupees}
+          onChange={(e) => {
+            if (discountType === 'percentage') {
+              setDiscountPercentage(e.target.value);
+            } else {
+              setDiscountRupees(e.target.value);
+            }
+          }}
+          min="0"
+          max={discountType === 'percentage' ? "100" : "10000000"}
+          step={discountType === 'percentage' ? "0.01" : "1"}
+          className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            error ? 'border-red-300' : 'border-gray-300'
+          }`}
+          placeholder={discountType === 'percentage' ? "0" : "0"}
+        />
+        <div className="w-16 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-center">
+          {discountType === 'percentage' ? '%' : '₹'}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // CalculationDisplay Component
 const CalculationDisplay = ({ totalAmount, breakdown }) => {
   return (
@@ -136,7 +215,12 @@ const CalculationDisplay = ({ totalAmount, breakdown }) => {
               <span>₹ {formatCurrency(breakdown.totalWithGst)}</span>
             </div>
             <div className="flex justify-between text-purple-600">
-              <span>Discount ({breakdown.discount}%):</span>
+              <span>
+                {breakdown.discountType === 'percentage' 
+                  ? `Discount (${breakdown.discount}%)` 
+                  : 'Discount'}
+                :
+              </span>
               <span>- ₹ {formatCurrency(breakdown.discountAmount)}</span>
             </div>
             <div className="border-t pt-1 mt-1 font-semibold">
@@ -185,7 +269,11 @@ const JewelleryCalculator = () => {
   const [metalWeight, setMetalWeight] = useState('');
   const [diamondWeight, setDiamondWeight] = useState('');
   const [stoneWeight, setStoneWeight] = useState('');
-  const [discount, setDiscount] = useState('');
+  
+  // Discount states - now with both percentage and rupees
+  const [discountType, setDiscountType] = useState('percentage'); // 'percentage' or 'rupees'
+  const [discountPercentage, setDiscountPercentage] = useState('');
+  const [discountRupees, setDiscountRupees] = useState('');
   
   const [locks, setLocks] = useState({
     metalRate: false,
@@ -238,13 +326,25 @@ const JewelleryCalculator = () => {
     if (validateInput(gstOnMaking, 0, 100) > 100) {
       newErrors.gstOnMaking = 'Max 100%';
     }
-    if (validateInput(discount, 0, 100) > 100) {
-      newErrors.discount = 'Max 100% discount';
+    
+    // Validate discount based on type
+    if (discountType === 'percentage') {
+      if (validateInput(discountPercentage, 0, 100) > 100) {
+        newErrors.discountPercentage = 'Max 100% discount';
+      }
+    } else {
+      if (validateInput(discountRupees, 0, 10000000) < 0) {
+        newErrors.discountRupees = 'Cannot be negative';
+      }
     }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [metalRate, diamondRate, stoneRate, makingCharges, metalWeight, diamondWeight, stoneWeight, gstOnWhole, gstOnMaking, discount]);
+  }, [
+    metalRate, diamondRate, stoneRate, makingCharges, 
+    metalWeight, diamondWeight, stoneWeight, gstOnWhole, 
+    gstOnMaking, discountType, discountPercentage, discountRupees
+  ]);
 
   // Enhanced calculation with validation
   const calculateTotal = useCallback(() => {
@@ -262,7 +362,6 @@ const JewelleryCalculator = () => {
       const dr = validateInput(diamondRate, 0, 100000000);
       const sr = validateInput(stoneRate, 0, 1000000);
       const mc = validateInput(makingCharges, 0, 1000000);
-      const disc = validateInput(discount, 0, 100); // Cap discount at 100%
       const gstWhole = validateInput(gstOnWhole, 0, 100);
       const gstMaking = validateInput(gstOnMaking, 0, 100);
       
@@ -274,28 +373,30 @@ const JewelleryCalculator = () => {
       
       // Subtotal before GST
       const otherSubtotal = metalAmount + diamondAmount + stoneAmount;
-const subtotal = otherSubtotal + makingAmount;
+      const subtotal = otherSubtotal + makingAmount;
+      
       // GST calculations
       const gstOnWholeAmount = (otherSubtotal * gstWhole) / 100;
-const gstOnMakingAmount = (makingAmount * gstMaking) / 100;
+      const gstOnMakingAmount = (makingAmount * gstMaking) / 100;
+      
       // Total with GST
-      const totalWithGst =
-      otherSubtotal +
-      makingAmount +
-      gstOnWholeAmount +
-      gstOnMakingAmount;
-
-      // Apply discount (capped to prevent negative values)
-      const safeDiscount = isNaN(disc) || disc <= 0 ? 0 : disc;
-
-      // Apply discount (cannot exceed total)
-      const discountAmount = Math.min(
-      (totalWithGst * safeDiscount) / 100,
-      totalWithGst
-    );
-
-const finalTotal = Math.max(totalWithGst - discountAmount, 0);
-
+      const totalWithGst = otherSubtotal + makingAmount + gstOnWholeAmount + gstOnMakingAmount;
+      
+      // Calculate discount based on type
+      let discountValue, discountAmount;
+      
+      if (discountType === 'percentage') {
+        discountValue = validateInput(discountPercentage, 0, 100);
+        // Apply discount (capped to prevent negative values)
+        discountAmount = Math.min((totalWithGst * discountValue) / 100, totalWithGst);
+      } else {
+        discountValue = validateInput(discountRupees, 0, 10000000);
+        // Apply fixed rupee discount (capped to total amount)
+        discountAmount = Math.min(discountValue, totalWithGst);
+      }
+      
+      const finalTotal = Math.max(totalWithGst - discountAmount, 0);
+      
       // Create breakdown object
       const breakdownObj = {
         metalAmount,
@@ -308,7 +409,9 @@ const finalTotal = Math.max(totalWithGst - discountAmount, 0);
         gstMaking,
         gstOnMakingAmount,
         totalWithGst,
-        discount: disc,
+        discountType,
+        discount: discountType === 'percentage' ? discountValue : undefined,
+        discountRupees: discountType === 'rupees' ? discountValue : undefined,
         discountAmount,
         finalTotal
       };
@@ -328,7 +431,11 @@ const finalTotal = Math.max(totalWithGst - discountAmount, 0);
       console.error('Calculation error:', error);
       setToast({ message: 'Calculation error. Please check inputs.', type: 'error' });
     }
-  }, [metalRate, diamondRate, stoneRate, makingCharges, gstOnWhole, gstOnMaking, metalWeight, diamondWeight, stoneWeight, discount, validateAllInputs]);
+  }, [
+    metalRate, diamondRate, stoneRate, makingCharges, gstOnWhole, gstOnMaking, 
+    metalWeight, diamondWeight, stoneWeight, discountType, discountPercentage, 
+    discountRupees, validateAllInputs
+  ]);
 
   // Effect to calculate on input changes with debounce
   useEffect(() => {
@@ -344,9 +451,30 @@ const finalTotal = Math.max(totalWithGst - discountAmount, 0);
     setToast({ message: `${field} ${locks[field] ? 'unlocked' : 'locked'}`, type: 'info' });
   };
 
-  
- 
-   
+  // Reset all fields
+  const resetCalculator = () => {
+    setMetalRate('');
+    setDiamondRate('');
+    setStoneRate('');
+    setMakingCharges('');
+    setGstOnWhole('3');
+    setGstOnMaking('5');
+    setMetalWeight('');
+    setDiamondWeight('');
+    setStoneWeight('');
+    setDiscountType('percentage');
+    setDiscountPercentage('');
+    setDiscountRupees('');
+    setLocks({
+      metalRate: false,
+      diamondRate: false,
+      stoneRate: false,
+      makingCharges: false,
+      gstOnWhole: false,
+      gstOnMaking: false
+    });
+    setToast({ message: 'Calculator reset', type: 'success' });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
@@ -360,10 +488,19 @@ const finalTotal = Math.max(totalWithGst - discountAmount, 0);
       
       <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
+          <h1 className="text-3xl font-bold text-center text-gray-800">
             💎 Jewellery Shop Calculator
           </h1>
-         
+          <div className="flex gap-2 mt-4 md:mt-0">
+            <button
+              onClick={resetCalculator}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center gap-2 transition-colors"
+              title="Reset to default values"
+            >
+              <RefreshCw size={18} />
+              Reset
+            </button>
+          </div>
         </div>
         
         <div className="grid md:grid-cols-2 gap-6">
@@ -484,14 +621,15 @@ const finalTotal = Math.max(totalWithGst - discountAmount, 0);
               error={errors.stoneWeight}
             />
             
-            <WeightField 
-              label="Discount (%)" 
-              value={discount} 
-              setValue={setDiscount}
-              min="0"
-              max="100"
-              step="0.01"
-              error={errors.discount}
+            {/* New Discount Field with both options */}
+            <DiscountField 
+              discountType={discountType}
+              setDiscountType={setDiscountType}
+              discountPercentage={discountPercentage}
+              setDiscountPercentage={setDiscountPercentage}
+              discountRupees={discountRupees}
+              setDiscountRupees={setDiscountRupees}
+              error={errors.discountPercentage || errors.discountRupees}
             />
             
             <CalculationDisplay totalAmount={totalAmount} breakdown={breakdown} />
@@ -519,7 +657,11 @@ const finalTotal = Math.max(totalWithGst - discountAmount, 0);
                       <td className="px-4 py-2 text-sm">{calc.timestamp}</td>
                       <td className="px-4 py-2 text-sm">{metalWeight}</td>
                       <td className="px-4 py-2 text-sm">{diamondWeight}</td>
-                      <td className="px-4 py-2 text-sm">{discount}%</td>
+                      <td className="px-4 py-2 text-sm">
+                        {calc.breakdown.discountType === 'percentage' 
+                          ? `${calc.breakdown.discount}%` 
+                          : `₹ ${formatCurrency(calc.breakdown.discountRupees)}`}
+                      </td>
                       <td className="px-4 py-2 text-sm font-semibold">₹ {formatCurrency(calc.total)}</td>
                     </tr>
                   ))}
@@ -536,7 +678,8 @@ const finalTotal = Math.max(totalWithGst - discountAmount, 0);
             Total = [(Metal Weight × Metal Rate) + (Diamond Weight × Diamond Rate) + (Stone Weight × Stone Rate) + (Making Charges × Metal Weight)] + GST on Whole + GST on Making - Discount
           </p>
           <div className="text-xs text-gray-500 space-y-1">
-            <p>• Discount is capped at 100% to prevent negative totals</p>
+            <p>• Discount can be applied as Percentage (max 100%) or Fixed Rupees amount</p>
+            <p>• Discount is capped to prevent negative totals</p>
             <p>• All inputs are validated with appropriate min/max values</p>
             <p>• Calculations are debounced for performance</p>
             <p>• Rates can be locked for persistence across calculations</p>
